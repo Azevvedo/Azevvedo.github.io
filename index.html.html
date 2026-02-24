@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Chrome GIF Encoder</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Germania+One&display=swap" rel="stylesheet">
+
+<style>
+html, body{
+  margin:0;
+  padding:0;
+  height:auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  background:transparent;
+  font-family:'Germania One', monospace;
+
+  /* hide scrollbar (keep scrolling working) */
+  -ms-overflow-style:none;
+  scrollbar-width:none; /* Firefox */
+}
+body::-webkit-scrollbar{ width:0; height:0; }
+
+canvas{ touch-action: pan-y; }
+
+#canvas-container{
+  position:fixed;
+  inset:0;
+  z-index:0;
+}
+
+/* creates real scroll height, stays transparent so grid continues */
+#page-content{
+  position:relative;
+  height:400vh;
+  z-index:1;
+  background:transparent;
+}
+
+/* menu fades out smoothly when scrolling down */
+#menu{
+  position:fixed;
+  right:20px;
+  top:50%;
+  transform:translateY(-50%);
+  width:280px;
+  padding:25px;
+  background:rgba(0,0,0,.9);
+  border:1px solid #fff;
+  border-radius:10px;
+  color:#fff;
+  z-index:10;
+
+  transition: opacity 300ms ease, transform 300ms ease;
+  will-change: opacity, transform;
+}
+#menu.hidden{
+  opacity:0;
+  transform: translateY(-50%) translateX(10px);
+  pointer-events:none;
+}
+
+#menu label,
+#userInput{
+  font-family:'Germania One', cursive;
+  letter-spacing:1px;
+}
+
+input{
+  width:100%;
+  background:transparent;
+  border:none;
+  border-bottom:1px solid #222;
+  color:#fff;
+  font-size:20px;
+  margin-bottom:15px;
+  text-transform:uppercase;
+  outline:none;
+}
+
+.action-row{
+  display:flex;
+  gap:10px;
+}
+
+button{
+  flex:1;
+  height:40px;
+  background:#fff;
+  border:none;
+  font-weight:bold;
+  cursor:pointer;
+  font-family:'Germania One', cursive;
+}
+
+#downloadBtn{
+  background:#222;
+  color:#fff;
+  opacity:.3;
+  pointer-events:none;
+  transition:.3s;
+}
+#downloadBtn.active{
+  background:#fff;
+  color:#000;
+  opacity:1;
+  pointer-events:auto;
+}
+
+#status{
+  margin-top:10px;
+  font-size:12px;
+  opacity:.7;
+}
+
+/* bottom-right label */
+#topLabel{
+  position:fixed;
+  right:24px;
+  bottom:18px;
+  z-index:9;
+  font-size:14px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.45);     /* greyish */
+  opacity:0;                        /* invisible by default */
+  transition: opacity 400ms ease;   /* clean fade */
+  pointer-events:none;
+  cursor:default;
+  user-select:none;
+}
+
+/* full screen fade overlay */
+#fadeOverlay{
+  position:fixed;
+  inset:0;
+  background:#000;
+  opacity:0;
+  pointer-events:none;
+  z-index:999;
+  transition: opacity 600ms ease;
+}
+
+
+/* encoding progress UI */
+#encodeProgressWrap{
+  margin-top:12px;
+  display:none; /* shown during encoding */
+  gap:8px;
+  flex-direction:column;
+}
+#encodeMeta{
+  display:flex;
+  justify-content:space-between;
+  font-size:12px;
+  opacity:0.85;
+}
+#encodeProgressTrack{
+  width:100%;
+  height:8px;
+  border:1px solid rgba(255,255,255,0.35);
+  border-radius:999px;
+  overflow:hidden;
+  background:rgba(255,255,255,0.06);
+}
+#encodeProgressBar{
+  height:100%;
+  width:0%;
+  background:#fff;
+  transition: width 120ms linear;
+}
+
+
+#scrollHint{
+  position:fixed;
+  left:50%;
+  top:82%;
+  transform:translateX(-50%);
+  font-family:'Germania One', cursive;
+  letter-spacing:1px;
+  font-size:14px;
+  color:rgba(255,255,255,0.6);
+  pointer-events:none;
+  z-index:5;
+  transition: opacity 400ms ease;
+}
+
+
+/* top-center credit */
+#madeByZed{
+  position:fixed;
+  top:18px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:9;
+  font-size:13px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.45);
+  pointer-events:none;
+  user-select:none;
+}
+
+</style>
+</head>
+
+<body>
+<div id="canvas-container"></div>
+
+<div id="madeByZed">made by zed</div>
+
+<div id="scrollHint">[ scroll down for tools or click here ]</div>
+
+
+<div id="menu">
+  <label>Chrome Text</label>
+  <input type="text" id="userInput" value="" maxlength="10" placeholder="enter custom text">
+
+  <div class="action-row">
+    <button id="encodeBtn">Encode GIF</button>
+    <button id="downloadBtn">Download</button>
+  </div>
+
+  <div id="status">Ready</div>
+
+  <div id="encodeProgressWrap">
+    <div id="encodeMeta">
+      <span id="encodePhase">Idle</span>
+      <span id="encodeTime">00:00</span>
+    </div>
+    <div id="encodeProgressTrack">
+      <div id="encodeProgressBar"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="topLabel">Top of the page</div>
+
+<div id="page-content"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+
+<script type="importmap">
+{
+  "imports":{
+    "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { TTFLoader } from 'three/addons/loaders/TTFLoader.js';
+import { Font } from 'three/addons/loaders/FontLoader.js';
+
+let scene, camera, renderer, composer;
+let starPass;
+let font;
+
+let logoGroup;          // moves/scales/rotates (pivot stays centered)
+let textMesh = null;
+
+let textWidth = 0;      // local units (unscaled)
+let textHeight = 0;
+
+let autoRotation = true;
+let lastInteraction = 0;
+let workerURL;
+let gifURL = null;
+
+const TOTAL_FRAMES = 240;
+
+const GOTH_FONT_TTF = 'https://fonts.gstatic.com/s/germaniaone/v4/3_6AyUql_-FbDi1e68jHdInF5uFdDttMLvmWuJdhhgs.ttf';
+
+/* TINY grid squares */
+const GRID_STEP = 5;
+const GRID_MAJOR_EVERY = 8;
+
+/* scroll motion */
+let scrollProgress = 0;
+const SMOOTHING = 0.10;
+
+/* ✅ ONLY change: make top-left slightly smaller */
+const headerScale = 0.32;
+
+let currentScale = 1;
+
+const startPos = new THREE.Vector3(0,0,0);
+const headerCornerWorld = new THREE.Vector3(0,0,0); // top-left corner target in world space
+
+const menuEl = document.getElementById('menu');
+const statusEl = document.getElementById('status');
+const topLabelEl = document.getElementById('topLabel');
+
+  const scrollHintEl = document.getElementById('scrollHint');
+
+
+const progressWrapEl = document.getElementById('encodeProgressWrap');
+const progressBarEl  = document.getElementById('encodeProgressBar');
+const phaseEl        = document.getElementById('encodePhase');
+const timeEl         = document.getElementById('encodeTime');
+
+function fmtTime(ms){
+  const s = Math.max(0, Math.floor(ms/1000));
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  return `${mm}:${ss}`;
+}
+
+function setProgressUI(show, phaseText="Idle", pct=0, elapsedMs=0){
+  progressWrapEl.style.display = show ? "flex" : "none";
+  phaseEl.textContent = phaseText;
+  progressBarEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  timeEl.textContent = fmtTime(elapsedMs);
+}
+
+
+const vTargetPos = new THREE.Vector3();
+const vHeaderPivot = new THREE.Vector3();
+
+/* layout sync state (Firefox) */
+let lastW = 0;
+let lastH = 0;
+let lastDPR = 0;
+
+init();
+
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+function smoothstep(edge0, edge1, x){
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
+function getScrollY(){
+  const se = document.scrollingElement;
+  if (se && typeof se.scrollTop === "number") return se.scrollTop;
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
+
+/* screen px -> world point on z=0 plane */
+function screenToWorldOnZ0(px, py){
+  const ndc = new THREE.Vector3(
+    (px / window.innerWidth) * 2 - 1,
+    1 - (py / window.innerHeight) * 2,
+    0.5
+  );
+  ndc.unproject(camera);
+
+  const dir = ndc.sub(camera.position).normalize();
+  const t = (0 - camera.position.z) / dir.z;
+  return camera.position.clone().add(dir.multiplyScalar(t));
+}
+
+function updateHeaderCornerTarget(){
+  // tweak these margins if needed
+  const marginX = 35;
+  const marginY = 35;
+
+  headerCornerWorld.copy(screenToWorldOnZ0(marginX, marginY));
+  headerCornerWorld.z = startPos.z;
+}
+
+function syncLayoutIfNeeded(force=false){
+  if(!renderer || !composer || !camera) return;
+
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  if(!force && w === lastW && h === lastH && dpr === lastDPR) return;
+
+  lastW = w; lastH = h; lastDPR = dpr;
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+
+  // keep star glare shader sampling correct in buffer pixels
+  if(starPass){
+    const pr = renderer.getPixelRatio();
+    starPass.uniforms.resolution.value.set(w * pr, h * pr);
+  }
+
+  updateHeaderCornerTarget();
+}
+
+async function init(){
+  scene = new THREE.Scene();
+
+  // lights so chrome never goes black
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+  dir.position.set(5, 5, 10);
+  scene.add(dir);
+
+  camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.z = 18;
+
+  renderer = new THREE.WebGLRenderer({
+    antialias:true,
+    preserveDrawingBuffer:true
+  });
+  renderer.setClearColor(0x000000, 1); // solid wallpaper background
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+
+  document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+  /* ===== BACKGROUND MICRO GRID ===== */
+  const gridCanvas = document.createElement('canvas');
+  gridCanvas.width = 2048;
+  gridCanvas.height = 2048;
+  const gctx = gridCanvas.getContext('2d');
+
+  gctx.fillStyle = "#000";
+  gctx.fillRect(0,0,gridCanvas.width,gridCanvas.height);
+
+  function line(x1,y1,x2,y2){
+    gctx.beginPath();
+    gctx.moveTo(Math.round(x1)+0.5, Math.round(y1)+0.5);
+    gctx.lineTo(Math.round(x2)+0.5, Math.round(y2)+0.5);
+    gctx.stroke();
+  }
+
+  // minor lines
+  gctx.strokeStyle = "rgba(255,255,255,0.001)";
+  gctx.lineWidth = 1;
+  for(let i=0;i<=gridCanvas.width;i+=GRID_STEP){
+    line(i,0,i,gridCanvas.height);
+    line(0,i,gridCanvas.width,i);
+  }
+
+  // major lines
+  gctx.strokeStyle = "rgba(255,255,255,0.02)";
+  gctx.lineWidth = 1;
+  const majorStep = GRID_STEP * GRID_MAJOR_EVERY;
+  for(let i=0;i<=gridCanvas.width;i+=majorStep){
+    line(i,0,i,gridCanvas.height);
+    line(0,i,gridCanvas.width,i);
+  }
+
+  const gridTexture = new THREE.CanvasTexture(gridCanvas);
+  gridTexture.generateMipmaps = false;
+  gridTexture.minFilter = THREE.NearestFilter;
+  gridTexture.magFilter = THREE.NearestFilter;
+  gridTexture.needsUpdate = true;
+
+  const gridMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(120, 120),
+    new THREE.MeshBasicMaterial({ map: gridTexture })
+  );
+  gridMesh.position.z = -35;
+  scene.add(gridMesh);
+
+  /* ===== ENV (for chrome reflections) ===== */
+  const size = 1024;
+  const envCanvas = document.createElement('canvas');
+  envCanvas.width = size;
+  envCanvas.height = size;
+  const ctx = envCanvas.getContext('2d');
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,size,size);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(size*0.25,0,size*0.05,size);
+  ctx.fillRect(size*0.7,0,size*0.05,size);
+
+  const envTexture = new THREE.CanvasTexture(envCanvas);
+  envTexture.mapping = THREE.EquirectangularReflectionMapping;
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromEquirectangular(envTexture).texture;
+
+
+  /* ===== STAR GLARE (sharper, more star-shaped than bloom) ===== */
+  const StarGlareShader = {
+    uniforms: {
+      tDiffuse:   { value: null },
+      resolution: { value: new THREE.Vector2(1,1) },
+      threshold:  { value: 0.82 },   // higher = fewer highlights, cleaner star
+      intensity:  { value: 0.6 },   // overall star strength
+      spread:     { value: 1.8 }     // streak length multiplier (in pixels)
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main(){
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform sampler2D tDiffuse;
+      uniform vec2 resolution;
+      uniform float threshold;
+      uniform float intensity;
+      uniform float spread;
+
+      float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+
+      vec3 brightSample(vec2 uv){
+        vec3 c = texture2D(tDiffuse, uv).rgb;
+        float lum = luma(c);
+        // soft-knee threshold prevents sudden spikes
+        float b = smoothstep(threshold, threshold + 0.18, lum);
+        return c * b;
+      }
+
+      void main(){
+        vec3 base = texture2D(tDiffuse, vUv).rgb;
+
+        // 4-point star (two diagonals). Weighted taps for a crisp "glare" shape.
+        vec2 px = vec2(1.0) / resolution;
+        vec2 d1 = normalize(vec2( 1.0,  1.0)) * px * spread;
+        vec2 d2 = normalize(vec2( 1.0, -1.0)) * px * spread;
+
+        vec3 acc = vec3(0.0);
+        // tap weights (crisp core + falloff)
+        float w0 = 0.55;
+        float w1 = 0.22;
+        float w2 = 0.12;
+        float w3 = 0.07;
+        float w4 = 0.04;
+
+        acc += brightSample(vUv) * w0;
+
+        acc += (brightSample(vUv + d1*1.0) + brightSample(vUv - d1*1.0) +
+                brightSample(vUv + d2*1.0) + brightSample(vUv - d2*1.0)) * w1;
+
+        acc += (brightSample(vUv + d1*2.0) + brightSample(vUv - d1*2.0) +
+                brightSample(vUv + d2*2.0) + brightSample(vUv - d2*2.0)) * w2;
+
+        acc += (brightSample(vUv + d1*3.0) + brightSample(vUv - d1*3.0) +
+                brightSample(vUv + d2*3.0) + brightSample(vUv - d2*3.0)) * w3;
+
+        acc += (brightSample(vUv + d1*4.0) + brightSample(vUv - d1*4.0) +
+                brightSample(vUv + d2*4.0) + brightSample(vUv - d2*4.0)) * w4;
+
+        // cap glare so it never becomes blinding
+        acc = clamp(acc, vec3(0.0), vec3(0.35));
+        vec3 outCol = base + acc * intensity;
+        gl_FragColor = vec4(outCol, 1.0);
+      }
+    `
+  };
+
+  starPass = new ShaderPass(StarGlareShader);
+
+  /* ===== BLOOM ===== */
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene,camera));
+
+  // Sharper, star-shaped glare pass (adds on top of the render)
+  composer.addPass(starPass);
+
+  // Keep bloom subtle so it doesn't look foggy
+  composer.addPass(new UnrealBloomPass(
+    new THREE.Vector2(1,1),
+    0.22,
+    0.10,
+    0.93
+  ));
+  /* ===== LOGO GROUP ===== */
+  logoGroup = new THREE.Group();
+  logoGroup.position.copy(startPos);
+  scene.add(logoGroup);
+
+  /* initial sync + delayed sync (Firefox settling) */
+  syncLayoutIfNeeded(true);
+  requestAnimationFrame(()=>syncLayoutIfNeeded(true));
+  requestAnimationFrame(()=>syncLayoutIfNeeded(true));
+
+  /* ===== 3D TEXT (GOTH) ===== */
+  new TTFLoader().load(
+    GOTH_FONT_TTF,
+    json=>{
+      font = new Font(json);
+      updateText();
+      syncLayoutIfNeeded(true);
+    }
+  );
+
+  function updateText(){
+    if(!font) return;
+
+    if(textMesh){
+      textMesh.geometry.dispose();
+      logoGroup.remove(textMesh);
+      textMesh = null;
+    }
+
+    const rawValue = document.getElementById('userInput').value.trim();
+    const renderValue = rawValue === "" ? "TOOLS" : rawValue;
+
+    const geo = new TextGeometry(
+      renderValue.toUpperCase(),
+      {
+        font: font,
+        size: 2.6,
+        height: 0.45,
+        curveSegments: 12,
+        bevelEnabled: true,
+        bevelThickness: 0.12,
+        bevelSize: 0.06,
+        bevelSegments: 4
+      }
+    );
+
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox;
+    textWidth  = bb.max.x - bb.min.x;
+    textHeight = bb.max.y - bb.min.y;
+
+    // keep pivot centered ALWAYS
+    geo.center();
+
+    const material = new THREE.MeshPhysicalMaterial({
+      metalness: 1,
+      roughness: 0.06,
+      clearcoat: 1,
+      clearcoatRoughness: 0.03,
+      envMapIntensity: 1.6
+    });
+
+    textMesh = new THREE.Mesh(geo, material);
+    logoGroup.add(textMesh);
+  }
+
+  document.getElementById('userInput').addEventListener('input', updateText);
+
+  /* ===== DRAG ROTATION ===== */
+  let dragging=false, prevX=0;
+
+  renderer.domElement.addEventListener('mousedown',e=>{
+    dragging=true;
+    autoRotation=false;
+    prevX=e.clientX;
+    lastInteraction=Date.now();
+  });
+
+  window.addEventListener('mouseup',()=>dragging=false);
+
+  window.addEventListener('mousemove',e=>{
+    if(!dragging || !logoGroup) return;
+    const delta=e.clientX-prevX;
+    prevX=e.clientX;
+    logoGroup.rotation.y += delta*0.01;
+    lastInteraction=Date.now();
+  });
+
+  /* ===== WORKER PRELOAD ===== */
+  const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+  workerURL = URL.createObjectURL(await res.blob());
+
+  /* ===== BUTTONS ===== */
+  document.getElementById('encodeBtn').addEventListener('click',encodeGIF);
+  document.getElementById('downloadBtn').addEventListener('click',downloadGIF);
+
+  // Viewport can "settle" after first paint (mobile address bar / safe-area).
+  // Doing a few late sync passes + listening to visualViewport prevents the text
+  // from appearing stuck in the center on first load.
+  function lateSync(){
+    requestAnimationFrame(()=>syncLayoutIfNeeded(true));
+    setTimeout(()=>syncLayoutIfNeeded(true), 50);
+    setTimeout(()=>syncLayoutIfNeeded(true), 250);
+  }
+
+  window.addEventListener('resize', lateSync);
+  window.addEventListener('orientationchange', lateSync);
+  window.addEventListener('load', lateSync);
+  window.addEventListener('pageshow', lateSync);
+  document.addEventListener('visibilitychange', ()=>{
+    if(!document.hidden) lateSync();
+  });
+
+  if(window.visualViewport){
+    visualViewport.addEventListener('resize', lateSync);
+    visualViewport.addEventListener('scroll', lateSync);
+  }
+
+  lateSync();
+  
+const fadeOverlay = document.getElementById('fadeOverlay');
+
+topLabelEl.addEventListener('click', () => {
+
+  if (getScrollY() < 5) return;
+
+  fadeOverlay.style.opacity = "1";
+
+  setTimeout(() => {
+    window.scrollTo(0, 0);
+
+    setTimeout(() => {
+      fadeOverlay.style.opacity = "0";
+    }, 50);
+
+  }, 600);
+});
+
+animate();
+}
+
+/* scroll progress */
+function updateScrollProgress(){
+  const y = getScrollY();
+  const trigger = Math.max(240, window.innerHeight * 0.75);
+  scrollProgress = clamp01(y / trigger);
+
+  if (y > 40) menuEl.classList.add('hidden');
+  else menuEl.classList.remove('hidden');
+
+  // label fade-in when chrome is basically "in place"
+  const labelAlpha = smoothstep(0.85, 1.0, scrollProgress);
+  topLabelEl.style.opacity = String(labelAlpha);
+
+  // fade scroll hint out as user scrolls
+  if(scrollHintEl){
+    scrollHintEl.style.opacity = String(1 - scrollProgress * 1.2);
+  }
+
+  // enable/disable top button interaction
+  if (y < 5) {
+    topLabelEl.style.pointerEvents = "none";
+    topLabelEl.style.cursor = "default";
+  } else {
+    topLabelEl.style.pointerEvents = "auto";
+    topLabelEl.style.cursor = "pointer";
+  }
+
+}
+
+/* auto rotate */
+function handleAuto(){
+  if(!logoGroup) return;
+  if(Date.now()-lastInteraction>2000) autoRotation=true;
+  if(autoRotation) logoGroup.rotation.y += 0.003;
+}
+
+/* place centered pivot so top-left corner stays inside margin */
+function updateLogoPosition(){
+  if(!logoGroup || !textMesh) return;
+
+  const targetScale = THREE.MathUtils.lerp(1, headerScale, scrollProgress);
+  currentScale = THREE.MathUtils.lerp(currentScale, targetScale, SMOOTHING);
+  logoGroup.scale.setScalar(currentScale);
+
+  // pivot position so the centered mesh's top-left lands at headerCornerWorld
+  vHeaderPivot.copy(headerCornerWorld);
+  vHeaderPivot.x += (textWidth * 0.5) * currentScale;
+  vHeaderPivot.y -= (textHeight * 0.5) * currentScale;
+
+  vTargetPos.copy(startPos).lerp(vHeaderPivot, scrollProgress);
+  logoGroup.position.lerp(vTargetPos, SMOOTHING);
+}
+
+/* ===== ENCODE ===== */
+function encodeGIF(){
+  if(!textMesh) return;
+  const startT = performance.now();
+  // --- Force wallpaper size ---
+  const originalSize = renderer.getSize(new THREE.Vector2());
+  const originalPixelRatio = renderer.getPixelRatio();
+  renderer.setPixelRatio(2);
+  renderer.setSize(1280, 720, false);
+  composer.setSize(1280, 720);
+  if(starPass){ starPass.uniforms.resolution.value.set(1280 * 2, 720 * 2); }
+
+  setProgressUI(true, "Capturing frames", 0, 0);
+
+  if(gifURL){
+    URL.revokeObjectURL(gifURL);
+    gifURL=null;
+  }
+
+  statusEl.innerText="Encoding...";
+  setProgressUI(true, "Capturing frames", 0, performance.now()-startT);
+  document.getElementById('downloadBtn').classList.remove('active');
+
+  const gif=new GIF({
+    workers:2,
+    quality:6,
+    width:1280,
+    height:720,
+    workerScript:workerURL
+    // NOTE: No transparency — export as an opaque "wallpaper" GIF
+  });
+
+  
+  // Capture at high-DPR (like the live site) then downscale into the GIF canvas.
+  const captureCanvas = document.createElement('canvas');
+  captureCanvas.width = 1280;
+  captureCanvas.height = 720;
+  const captureCtx = captureCanvas.getContext('2d', { alpha:false });
+let frame=0;
+  const baseRotY = logoGroup.rotation.y; // capture starting angle for a seamless loop
+
+  function record(){
+    if(frame < TOTAL_FRAMES){
+      // Set absolute rotation for perfectly even steps (no duplicated endpoint frame)
+      const t = frame / TOTAL_FRAMES; // 0..(TOTAL_FRAMES-1)/TOTAL_FRAMES
+      logoGroup.rotation.y = baseRotY + (Math.PI * 2) * t;
+
+      composer.render();
+      captureCtx.drawImage(renderer.domElement, 0, 0, 1280, 720);
+      gif.addFrame(captureCanvas, { copy:true, delay:50 });
+
+      frame++;
+      const pct = (frame / TOTAL_FRAMES) * 75; // 0-75% for capture
+      setProgressUI(true, "Capturing frames", pct, performance.now()-startT);
+      requestAnimationFrame(record);
+    }else{
+      setProgressUI(true, "Rendering GIF", 75, performance.now()-startT);
+      gif.render();
+    }
+  }
+
+
+  // gif.js reports render progress (0..1) while encoding
+  gif.on('progress', p => {
+    const pct = 75 + (Math.max(0, Math.min(1, p)) * 25);
+    setProgressUI(true, "Rendering GIF", pct, performance.now()-startT);
+  });
+
+  gif.on('finished',blob=>{
+    gifURL=URL.createObjectURL(blob);
+    statusEl.innerText="Ready to Download";
+    document.getElementById('downloadBtn').classList.add('active');
+    setProgressUI(true, "Done", 100, performance.now()-startT);
+    setTimeout(()=>setProgressUI(false, "Idle", 0, 0), 900);
+    // Restore original renderer size
+    renderer.setPixelRatio(originalPixelRatio);
+    renderer.setSize(originalSize.x, originalSize.y, false);
+    composer.setSize(originalSize.x, originalSize.y);
+    if(starPass){
+      const pr = renderer.getPixelRatio();
+      starPass.uniforms.resolution.value.set(originalSize.x * pr, originalSize.y * pr);
+    }
+
+  });
+
+  record();
+}
+
+/* ===== DOWNLOAD ===== */
+function downloadGIF(){
+  if(!gifURL) return;
+  const a=document.createElement('a');
+  a.href=gifURL;
+  a.download="chrome.gif";
+  a.click();
+}
+
+/* ===== LOOP ===== */
+function animate(){
+  requestAnimationFrame(animate);
+
+  // keep layout synced if Firefox settles late
+  syncLayoutIfNeeded(false);
+
+  updateScrollProgress();
+  handleAuto();
+  updateLogoPosition();
+  composer.render();
+}
+</script>
+
+
+<div id="fadeOverlay"></div>
+
+</body>
+</html>
