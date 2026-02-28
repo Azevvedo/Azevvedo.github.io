@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Chrome GIF Encoder</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Germania+One&display=swap" rel="stylesheet">
 
@@ -202,18 +201,121 @@ button{
   user-select:none;
 }
 
+
+/* ================= LOADER ================= */
+#siteLoader{
+  position:fixed;
+  inset:0;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:10000;
+  opacity:1;
+  transition: opacity 900ms cubic-bezier(.2,.8,.2,1);
+}
+
+#siteLoader.is-hiding{
+  opacity:0;
+}
+
+/* single glowing rotating dot */
+.spinner{
+  position:relative;
+  width:60px;
+  height:60px;
+}
+
+.spinner::before{
+  content:"";
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:6px;
+  height:6px;
+  background:#ffffff;
+  border-radius:50%;
+  transform-origin:-22px center;
+  box-shadow:
+    0 0 8px rgba(255,255,255,0.9),
+    0 0 18px rgba(255,255,255,0.6),
+    0 0 28px rgba(255,255,255,0.4);
+  animation: orbit 1.2s linear infinite;
+}
+
+@keyframes orbit{
+  to{ transform:rotate(360deg); }
+}
+/* =========================================== */
+
+
+/* ================= MENU TOGGLE BUTTON ================= */
+#menuToggle{
+  position:fixed;
+  top:18px;
+  right:20px;
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.35);
+  background:rgba(0,0,0,.9);
+  color:#fff;
+  cursor:pointer;
+  z-index:11;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-family:'Germania One', cursive;
+  font-size:22px;
+  line-height:1;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+#menuToggle:active{
+  transform: scale(0.98);
+}
+
+/* Place menu under the toggle button (top-right) */
+#menu{
+  top:76px;
+  right:20px;
+  transform:none;
+}
+
+/* Reuse .hidden for toggle (not scroll) */
+#menu.hidden{
+  opacity:0;
+  transform: translateY(-6px);
+  pointer-events:none;
+}
+/* ====================================================== */
+
+
+#menuToggle.hidden-on-scroll{
+  opacity:0;
+  transform:translateY(-10px);
+  pointer-events:none;
+}
+
 </style>
 </head>
 
 <body>
+
+<!-- LOADER -->
+<div id="siteLoader">
+  <div class="spinner"></div>
+</div>
+
 <div id="canvas-container"></div>
 
-<div id="madeByZed">made by zed</div>
+<div id="madeByZed">made by Guilherme Azevedo</div>
 
-<div id="scrollHint">[ scroll down for tools or click here ]</div>
+<button id="menuToggle" aria-controls="menu" aria-expanded="true" title="Toggle menu">✎</button>
+
+<div id="scrollHint">[ scroll down ]</div>
 
 
-<div id="menu">
+<div id="menu" class="hidden">
   <label>Chrome Text</label>
   <input type="text" id="userInput" value="" maxlength="10" placeholder="enter custom text">
 
@@ -281,15 +383,15 @@ const TOTAL_FRAMES = 240;
 
 const GOTH_FONT_TTF = 'https://fonts.gstatic.com/s/germaniaone/v4/3_6AyUql_-FbDi1e68jHdInF5uFdDttMLvmWuJdhhgs.ttf';
 
-/* TINY grid squares */
+/* tiny grid squares */
 const GRID_STEP = 5;
 const GRID_MAJOR_EVERY = 8;
 
-/* scroll motion */
+/* scroll motion / smoothing */
 let scrollProgress = 0;
 const SMOOTHING = 0.10;
 
-/* ✅ ONLY change: make top-left slightly smaller */
+/* slightly smaller when it docks into the header */
 const headerScale = 0.32;
 
 let currentScale = 1;
@@ -300,6 +402,33 @@ const headerCornerWorld = new THREE.Vector3(0,0,0); // top-left corner target in
 const menuEl = document.getElementById('menu');
 const statusEl = document.getElementById('status');
 const topLabelEl = document.getElementById('topLabel');
+
+
+// --- Menu toggle (top-right button) ---
+const menuToggleBtn = document.getElementById('menuToggle');
+if(menuToggleBtn && menuEl){
+  const setExpanded = (expanded) => {
+    menuToggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  };
+
+  // start visible
+  setExpanded(false);
+
+  menuToggleBtn.addEventListener('click', () => {
+    const isHidden = menuEl.classList.toggle('hidden');
+    setExpanded(!isHidden);
+  });
+
+  // optional: close menu when clicking outside
+  document.addEventListener('mousedown', (e) => {
+    if(menuEl.classList.contains('hidden')) return;
+    if(e.target === menuToggleBtn) return;
+    if(menuEl.contains(e.target)) return;
+    menuEl.classList.add('hidden');
+    setExpanded(false);
+  });
+}
+
 
   const scrollHintEl = document.getElementById('scrollHint');
 
@@ -347,7 +476,7 @@ function getScrollY(){
   return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
 }
 
-/* screen px -> world point on z=0 plane */
+/* screen px -> world point on z=0 */
 function screenToWorldOnZ0(px, py){
   const ndc = new THREE.Vector3(
     (px / window.innerWidth) * 2 - 1,
@@ -420,7 +549,7 @@ async function init(){
 
   document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-  /* ===== BACKGROUND MICRO GRID ===== */
+  /* --- background micro grid --- */
   const gridCanvas = document.createElement('canvas');
   gridCanvas.width = 2048;
   gridCanvas.height = 2048;
@@ -466,7 +595,7 @@ async function init(){
   gridMesh.position.z = -35;
   scene.add(gridMesh);
 
-  /* ===== ENV (for chrome reflections) ===== */
+  /* --- env map (for chrome reflections) --- */
   const size = 1024;
   const envCanvas = document.createElement('canvas');
   envCanvas.width = size;
@@ -487,7 +616,7 @@ async function init(){
   scene.environment = pmrem.fromEquirectangular(envTexture).texture;
 
 
-  /* ===== STAR GLARE (sharper, more star-shaped than bloom) ===== */
+  /* --- star glare (sharper than bloom) --- */
   const StarGlareShader = {
     uniforms: {
       tDiffuse:   { value: null },
@@ -561,7 +690,7 @@ async function init(){
 
   starPass = new ShaderPass(StarGlareShader);
 
-  /* ===== BLOOM ===== */
+  /* --- bloom (kept subtle) --- */
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
 
@@ -575,17 +704,17 @@ async function init(){
     0.10,
     0.93
   ));
-  /* ===== LOGO GROUP ===== */
+  /* --- logo group --- */
   logoGroup = new THREE.Group();
   logoGroup.position.copy(startPos);
   scene.add(logoGroup);
 
-  /* initial sync + delayed sync (Firefox settling) */
+  /* initial sync + a couple extra passes (Firefox can be weird on first paint) */
   syncLayoutIfNeeded(true);
   requestAnimationFrame(()=>syncLayoutIfNeeded(true));
   requestAnimationFrame(()=>syncLayoutIfNeeded(true));
 
-  /* ===== 3D TEXT (GOTH) ===== */
+  /* --- 3D text --- */
   new TTFLoader().load(
     GOTH_FONT_TTF,
     json=>{
@@ -605,13 +734,13 @@ async function init(){
     }
 
     const rawValue = document.getElementById('userInput').value.trim();
-    const renderValue = rawValue === "" ? "TOOLS" : rawValue;
+    const renderValue = rawValue === "" ? "IDK" : rawValue;
 
     const geo = new TextGeometry(
       renderValue.toUpperCase(),
       {
         font: font,
-        size: 2.6,
+        size: 1.9,
         height: 0.45,
         curveSegments: 12,
         bevelEnabled: true,
@@ -630,6 +759,8 @@ async function init(){
     geo.center();
 
     const material = new THREE.MeshPhysicalMaterial({
+      transparent: true,
+      opacity: 1,
       metalness: 1,
       roughness: 0.06,
       clearcoat: 1,
@@ -643,7 +774,7 @@ async function init(){
 
   document.getElementById('userInput').addEventListener('input', updateText);
 
-  /* ===== DRAG ROTATION ===== */
+  /* --- drag rotation --- */
   let dragging=false, prevX=0;
 
   renderer.domElement.addEventListener('mousedown',e=>{
@@ -663,11 +794,11 @@ async function init(){
     lastInteraction=Date.now();
   });
 
-  /* ===== WORKER PRELOAD ===== */
+  /* --- worker preload --- */
   const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
   workerURL = URL.createObjectURL(await res.blob());
 
-  /* ===== BUTTONS ===== */
+  /* --- buttons --- */
   document.getElementById('encodeBtn').addEventListener('click',encodeGIF);
   document.getElementById('downloadBtn').addEventListener('click',downloadGIF);
 
@@ -722,16 +853,37 @@ function updateScrollProgress(){
   const trigger = Math.max(240, window.innerHeight * 0.75);
   scrollProgress = clamp01(y / trigger);
 
-  if (y > 40) menuEl.classList.add('hidden');
-  else menuEl.classList.remove('hidden');
+  // shared fade value (sync UI + text)
+  const fadeVal = Math.max(0, 1 - scrollProgress * 1.2);
 
+
+
+  // menu visibility is controlled by the top-right toggle button
   // label fade-in when chrome is basically "in place"
   const labelAlpha = smoothstep(0.85, 1.0, scrollProgress);
   topLabelEl.style.opacity = String(labelAlpha);
 
   // fade scroll hint out as user scrolls
+  
+  // sync edit button + "made by" fade with scroll hint
+  if(menuToggleBtn){
+    menuToggleBtn.style.opacity = fadeVal;
+    menuToggleBtn.style.pointerEvents = fadeVal < 0.05 ? "none" : "auto";
+  }
+  const madeByEl = document.getElementById('madeByZed');
+  if(madeByEl){
+    madeByEl.style.opacity = fadeVal;
+  }
+
+  // fade the chrome text itself
+  if(textMesh && textMesh.material){
+    textMesh.material.transparent = true;
+    textMesh.material.opacity = fadeVal;
+    textMesh.visible = fadeVal > 0.01;
+  }
+
   if(scrollHintEl){
-    scrollHintEl.style.opacity = String(1 - scrollProgress * 1.2);
+    scrollHintEl.style.opacity = String(fadeVal);
   }
 
   // enable/disable top button interaction
@@ -752,24 +904,23 @@ function handleAuto(){
   if(autoRotation) logoGroup.rotation.y += 0.003;
 }
 
-/* place centered pivot so top-left corner stays inside margin */
+/* move the chrome text upward as you scroll, then it fades out */
 function updateLogoPosition(){
   if(!logoGroup || !textMesh) return;
 
-  const targetScale = THREE.MathUtils.lerp(1, headerScale, scrollProgress);
-  currentScale = THREE.MathUtils.lerp(currentScale, targetScale, SMOOTHING);
+  // Keep scale stable
+  currentScale = THREE.MathUtils.lerp(currentScale, 1, SMOOTHING);
   logoGroup.scale.setScalar(currentScale);
 
-  // pivot position so the centered mesh's top-left lands at headerCornerWorld
-  vHeaderPivot.copy(headerCornerWorld);
-  vHeaderPivot.x += (textWidth * 0.5) * currentScale;
-  vHeaderPivot.y -= (textHeight * 0.5) * currentScale;
+  // Small upward movement before fading
+  const SMALL_UP_DISTANCE = 3; // subtle movement
+  const targetPos = startPos.clone();
+  targetPos.y += SMALL_UP_DISTANCE * scrollProgress;
 
-  vTargetPos.copy(startPos).lerp(vHeaderPivot, scrollProgress);
-  logoGroup.position.lerp(vTargetPos, SMOOTHING);
+  logoGroup.position.lerp(targetPos, SMOOTHING);
 }
 
-/* ===== ENCODE ===== */
+/* --- encode --- */
 function encodeGIF(){
   if(!textMesh) return;
   const startT = performance.now();
@@ -857,7 +1008,7 @@ let frame=0;
   record();
 }
 
-/* ===== DOWNLOAD ===== */
+/* --- download --- */
 function downloadGIF(){
   if(!gifURL) return;
   const a=document.createElement('a');
@@ -866,7 +1017,7 @@ function downloadGIF(){
   a.click();
 }
 
-/* ===== LOOP ===== */
+/* --- loop --- */
 function animate(){
   requestAnimationFrame(animate);
 
@@ -882,6 +1033,51 @@ function animate(){
 
 
 <div id="fadeOverlay"></div>
+
+
+<script>
+(() => {
+  const MIN_SHOW_MS = 1200;     // keeps loader a lil bit longer
+  const FADE_MS = 900;          // must match CSS transition
+  const startedAt = performance.now();
+
+  function hideLoader(){
+    const loader = document.getElementById("siteLoader");
+    if(!loader) return;
+
+    const elapsed = performance.now() - startedAt;
+    const wait = Math.max(0, MIN_SHOW_MS - elapsed);
+
+    setTimeout(() => {
+      loader.classList.add("is-hiding");
+      setTimeout(() => {
+        loader.style.display = "none";
+      }, FADE_MS + 50);
+    }, wait);
+  }
+
+  // hide after full load (assets + fonts + three.js stuff)
+  window.addEventListener("load", hideLoader);
+})();
+</script>
+
+
+<script>
+/* ===== Wide Scrolling Browser Tab Title ===== */
+(function(){
+  const baseText = "  ✦ IDK  ✦  IDK  ✦  IDK ";  // wider horizontal loop
+  let text = baseText;
+  const speed = 160;  // slightly smoother
+
+  function scrollTitle(){
+    text = text.substring(1) + text.charAt(0);
+    document.title = text;
+  }
+
+  setInterval(scrollTitle, speed);
+})();
+</script>
+
 
 </body>
 </html>
