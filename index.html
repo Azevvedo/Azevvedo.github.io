@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
-<title>IDK.</title>
+<title>the wall</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23000'/%3E%3Cpath fill='%23fff' d='M50 9L68 27L50 45L32 27Z M73 32L91 50L73 68L55 50Z M50 55L68 73L50 91L32 73Z M27 32L45 50L27 68L9 50Z'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,8 +13,10 @@
   :root {
     --ink: #fff; --muted: #777; --line: rgb(255 255 255 / 0.25); --err: #ff8a8a;
     --glow: 0 0 0.06em rgb(255 255 255 / 0.9), 0 0 0.28em rgb(130 170 255 / 0.8), 0 0 0.7em rgb(70 100 255 / 0.6);
+    --pic-glow: 0 0 0.5rem rgb(255 255 255 / 0.35), 0 0 1.6rem rgb(120 160 255 / 0.7), 0 0 3.5rem rgb(70 100 255 / 0.45);
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; }
   html { overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
@@ -30,6 +32,33 @@
   }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
+  /* ---------- Loading screen ---------- */
+  #loader {
+    position: fixed; inset: 0; z-index: 50;
+    background: #000;
+    display: grid; place-items: center;
+    transition: opacity 0.6s ease, visibility 0.6s;
+  }
+  #loader.done { opacity: 0; visibility: hidden; pointer-events: none; }
+  #loader svg {
+    width: 76px; height: 76px;
+    filter: drop-shadow(0 0 0.4rem rgb(130 170 255 / 0.9)) drop-shadow(0 0 1.3rem rgb(70 100 255 / 0.7));
+  }
+  #loader path {
+    fill: #fff;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: diamond 1.4s ease-in-out infinite;
+  }
+  #loader path:nth-child(2) { animation-delay: 0.175s; }
+  #loader path:nth-child(3) { animation-delay: 0.35s; }
+  #loader path:nth-child(4) { animation-delay: 0.525s; }
+  @keyframes diamond {
+    0%, 100% { opacity: 0.2; transform: scale(0.7); }
+    40%      { opacity: 1;   transform: scale(1); }
+  }
+
+  /* ---------- The quote ---------- */
   main {
     display: grid;
     place-items: center;
@@ -54,7 +83,7 @@
     text-shadow: var(--glow);
     animation: glowPulse 3.2s ease-in-out infinite;
   }
-  #letters.calm { animation: none; } 
+  #letters.calm { animation: none; } /* long texts and photos skip the text-glow pulse */
   @keyframes glowPulse {
     0%, 100% { text-shadow: var(--glow); }
     50% {
@@ -73,6 +102,23 @@
     50%      { transform: translateY(-0.07em) rotate(1.5deg); }
   }
 
+  /* A photo on the wall */
+  #letters .pic {
+    display: block;
+    width: auto; height: auto;
+    max-width: min(88vw, 900px);
+    max-height: min(62vh, 720px);
+    border-radius: 18px;
+    box-shadow: var(--pic-glow);
+    animation: picGlow 3.2s ease-in-out infinite;
+    -webkit-user-drag: none;
+  }
+  @keyframes picGlow {
+    0%, 100% { box-shadow: var(--pic-glow); }
+    50% { box-shadow: 0 0 0.6rem rgb(255 255 255 / 0.5), 0 0 2.2rem rgb(150 185 255 / 0.9), 0 0 4.5rem rgb(80 110 255 / 0.65); }
+  }
+
+  /* Entrance animations: one is picked at random every time the wall changes */
   #letters[class*="fx-"] .ch {
     animation-duration: 1s;
     animation-fill-mode: both;
@@ -135,6 +181,7 @@
     100% { transform: none; text-shadow: var(--glow); }
   }
 
+  /* Whole-wall shake for the loud ones */
   #quote.shaking { animation: shake 0.6s 0.15s ease-in-out; }
   @keyframes shake {
     0%, 100% { transform: none; }
@@ -145,6 +192,7 @@
     80% { transform: translate(-3px, 2px); }
   }
 
+  /* ---------- Minimal input ---------- */
   footer {
     padding: 0 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px));
     padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
@@ -176,31 +224,53 @@
   }
   #input::placeholder { color: var(--muted); }
   #input:focus { outline: none; border-bottom-color: var(--ink); }
-  #send {
+
+  .round {
     flex: none;
     width: 40px; height: 40px;
     display: grid; place-items: center;
+    padding: 0;
     background: transparent;
     color: var(--ink);
     border: 1px solid var(--line);
     border-radius: 50%;
     cursor: pointer;
   }
-  #send:hover:not(:disabled) { background: var(--ink); color: #000; }
-  #send:disabled { opacity: 0.3; cursor: default; }
-  #send:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .round:hover:not(:disabled) { background: var(--ink); color: #000; }
+  .round:disabled { opacity: 0.3; cursor: default; }
+  .round:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .round.ghost { border-color: transparent; color: var(--muted); }
+  .round.ghost:hover:not(:disabled) { background: transparent; color: var(--ink); }
+  .round.small { width: 30px; height: 30px; }
 
+  #pending {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; justify-content: center; gap: 0.7rem;
+    min-height: 46px;
+    padding: 0.35rem 0;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  #thumb {
+    width: 34px; height: 34px; border-radius: 8px; object-fit: cover;
+    box-shadow: 0 0 0.6rem rgb(120 160 255 / 0.6);
+  }
+
+  /* Used only while JS measures how big the text can be */
   .measuring .word { white-space: nowrap; max-width: none; }
 
+  /* Phones and short (landscape) screens */
   @media (max-width: 700px), (max-height: 560px) {
     #quote { line-height: 1.05; letter-spacing: -0.02em; }
     footer { padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px)); }
     #input { font-size: 1.05rem; padding: 0.8rem 0; }
-    #send { width: 46px; height: 46px; }
+    .round { width: 46px; height: 46px; }
+    .round.small { width: 32px; height: 32px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #letters, #letters .ch, .in, #quote { animation: none !important; }
+    #letters, #letters .ch, .in, #quote, #letters .pic, #loader path { animation: none !important; }
+    #loader path { opacity: 1; }
   }
 </style>
 </head>
@@ -216,43 +286,75 @@
 <footer>
   <p id="note" role="status"></p>
   <form id="form" autocomplete="off">
-    <input id="input" type="text" maxlength="200" enterkeyhint="send" placeholder="Escreve alguma merda" aria-label="New message for everyone">
-    <button id="send" type="submit" aria-label="Send" disabled>
+    <button class="round ghost" id="attach" type="button" aria-label="Send a photo instead" title="Send a photo instead">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 9"/></svg>
+    </button>
+    <input type="file" id="file" accept="image/*" hidden>
+
+    <input id="input" type="text" maxlength="200" enterkeyhint="send" placeholder="type something…" aria-label="New message for everyone">
+
+    <div id="pending" hidden>
+      <img id="thumb" alt="Photo ready to send">
+      <span>photo ready</span>
+      <button class="round ghost small" id="removeImg" type="button" aria-label="Remove photo">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <button class="round" id="send" type="submit" aria-label="Send" disabled>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
     </button>
   </form>
 </footer>
+
+<div id="loader" role="status" aria-label="Loading">
+  <svg viewBox="0 0 100 100" aria-hidden="true">
+    <path d="M50 9L68 27L50 45L32 27Z"/>
+    <path d="M73 32L91 50L73 68L55 50Z"/>
+    <path d="M50 55L68 73L50 91L32 73Z"/>
+    <path d="M27 32L45 50L27 68L9 50Z"/>
+  </svg>
+</div>
 
 <script>
   const DB_URL = "https://github-7dded-default-rtdb.europe-west1.firebasedatabase.app";
   const NODE_URL = DB_URL.replace(/\/$/, "") + "/quote.json";
   const DEFAULT_TEXT = "type something below";
   const FX = ["drop", "spin", "zoom", "jelly", "slide", "flip", "blast", "glitch"];
+  const MAX_IMAGE_CHARS = 900000; // photos are shrunk until they fit under this size
 
   const $ = (id) => document.getElementById(id);
   const quoteEl = $("quote"), lettersEl = $("letters"), srEl = $("sr");
   const input = $("input"), sendBtn = $("send"), noteEl = $("note");
+  const attachBtn = $("attach"), fileInput = $("file");
+  const pendingEl = $("pending"), thumbEl = $("thumb"), removeBtn = $("removeImg");
+  const loader = $("loader");
+  const mainEl = document.querySelector("main");
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
   const compactMQ = window.matchMedia("(max-width: 700px), (max-height: 560px)");
-  const mainEl = document.querySelector("main");
 
   let state = {};
+  let lastKey = null;     // what is currently on the wall (text or photo)
   let lastText = null;
+  let mode = "text";
   let lastFx = null;
   let sending = false;
+  let pendingImage = null;
+  let renderSeq = 0;
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   function el(tag, cls, text) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text !== undefined) e.textContent = text;
     return e;
   }
-
   function setNote(msg, isError) {
     noteEl.textContent = msg;
     noteEl.classList.toggle("error", !!isError);
   }
 
+  // ---------- text -> animated letters ----------
   const segmenter = window.Intl && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   const splitChars = (t) => segmenter ? Array.from(segmenter.segment(t), (s) => s.segment) : Array.from(t);
 
@@ -263,6 +365,8 @@
     return "clamp(1.4rem, 4.5vw, 3rem)";
   }
 
+  // On phones: find the biggest font size where the text fits the screen
+  // without splitting words across lines.
   function fitToScreen() {
     const cs = getComputedStyle(mainEl);
     const availW = mainEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -298,7 +402,20 @@
     return fx;
   }
 
+  function playEntrance(fx, calm) {
+    lettersEl.className = "";
+    void lettersEl.offsetWidth; // restart the animation
+    lettersEl.className = "fx-" + fx + (calm ? " calm" : "");
+
+    quoteEl.classList.remove("shaking");
+    if (fx === "blast" || fx === "glitch" || fx === "drop") {
+      void quoteEl.offsetWidth;
+      quoteEl.classList.add("shaking");
+    }
+  }
+
   function renderText(text) {
+    renderSeq++;
     const fx = pickFx();
     lettersEl.textContent = "";
     srEl.textContent = text;
@@ -323,26 +440,95 @@
 
     applySize(text);
 
+    // keep the whole entrance under ~1.4s, however long the text is
     lettersEl.style.setProperty("--step", Math.min(45, Math.floor(1400 / Math.max(i, 1))) + "ms");
+    playEntrance(fx, text.length > (compactMQ.matches ? 30 : 60));
+  }
 
-    lettersEl.className = "";
-    void lettersEl.offsetWidth; 
-    lettersEl.className = "fx-" + fx + (text.length > (compactMQ.matches ? 30 : 60) ? " calm" : "");
+  function renderImage(src) {
+    const token = ++renderSeq;
+    const img = new Image();
+    img.className = "pic";
+    img.alt = "";
+    img.draggable = false;
+    img.src = src;
 
-    quoteEl.classList.remove("shaking");
-    if (fx === "blast" || fx === "glitch" || fx === "drop") {
-      void quoteEl.offsetWidth;
-      quoteEl.classList.add("shaking");
-    }
+    const show = () => {
+      if (token !== renderSeq) return; // something newer arrived while decoding
+      lettersEl.textContent = "";
+      srEl.textContent = "A photo";
+
+      const ch = el("span", "ch");
+      ch.style.setProperty("--i", 0);
+      ch.style.setProperty("--h", Math.floor(Math.random() * 360));
+      ch.style.setProperty("--r", (Math.random() * 20 - 10).toFixed(1));
+      ch.style.setProperty("--dir", Math.random() < 0.5 ? -1 : 1);
+      const inner = el("span", "in");
+      inner.append(img);
+      ch.append(inner);
+      lettersEl.append(ch);
+
+      lettersEl.style.setProperty("--step", "0ms");
+      playEntrance(pickFx(), true);
+    };
+    (img.decode ? img.decode() : Promise.resolve()).then(show, show);
   }
 
   function render() {
+    const image = typeof state.image === "string" && state.image.startsWith("data:image/") ? state.image : null;
+    if (image) {
+      const key = "i:" + image;
+      if (key === lastKey) return;
+      lastKey = key;
+      mode = "image";
+      renderImage(image);
+      return;
+    }
     const text = typeof state.text === "string" && state.text ? state.text : DEFAULT_TEXT;
-    if (text === lastText) return;
+    const key = "t:" + text;
+    if (key === lastKey) return;
+    lastKey = key;
     lastText = text;
+    mode = "text";
     renderText(text);
   }
 
+  // ---------- loading screen ----------
+  // Stays up until the font and the first data are ready, so the first
+  // entrance animation plays as the loader fades out.
+  let firstData = false, revealed = false, fontsReady = false, minTime = false;
+
+  function maybeReveal(force) {
+    if (revealed) return;
+    if (!force && !(firstData && fontsReady && minTime)) return;
+    revealed = true;
+    render();
+    loader.classList.add("done");
+    setTimeout(() => loader.remove(), 900);
+  }
+  function onData() {
+    firstData = true;
+    if (revealed) render(); else maybeReveal();
+  }
+
+  const fontLoad = document.fonts && document.fonts.load
+    ? document.fonts.load('800 1em "Bricolage Grotesque"', "Ag").catch(() => {})
+    : Promise.resolve();
+  Promise.race([fontLoad, sleep(3000)]).then(() => { fontsReady = true; maybeReveal(); });
+  setTimeout(() => { minTime = true; maybeReveal(); }, 800);
+  setTimeout(() => maybeReveal(true), 6000); // never get stuck on the loader
+
+  // ---------- live connection ----------
+  function setPath(obj, parts, val) {
+    if (!parts.length) return;
+    let cur = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (typeof cur[parts[i]] !== "object" || cur[parts[i]] === null) cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    const last = parts[parts.length - 1];
+    if (val === null) delete cur[last]; else cur[last] = val;
+  }
 
   function connect() {
     const es = new EventSource(NODE_URL);
@@ -359,68 +545,136 @@
 
     es.addEventListener("put", (e) => {
       const { path, data } = JSON.parse(e.data);
-      if (path === "/") {
-        state = data && typeof data === "object" ? data : {};
-      } else {
-        const key = path.split("/")[1];
-        if (data === null) delete state[key]; else state[key] = data;
-      }
-      render();
+      const parts = path.split("/").filter(Boolean);
+      if (!parts.length) state = data && typeof data === "object" ? data : {};
+      else setPath(state, parts, data);
+      onData();
     });
 
     es.addEventListener("patch", (e) => {
       const { data } = JSON.parse(e.data);
-      Object.assign(state, data);
-      render();
+      for (const [p, v] of Object.entries(data || {})) setPath(state, p.split("/").filter(Boolean), v);
+      onData();
     });
   }
 
+  // ---------- photos ----------
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("load")); };
+      img.src = url;
+    });
+  }
+
+  // Shrink the photo so it is small enough to store in the database.
+  async function compress(file) {
+    const img = await loadImage(file);
+    const sizes = [900, 720, 560];
+    const qualities = [0.72, 0.6, 0.5];
+    for (let i = 0; i < sizes.length; i++) {
+      const scale = Math.min(1, sizes[i] / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const url = canvas.toDataURL("image/jpeg", qualities[i]);
+      if (url.length <= MAX_IMAGE_CHARS) return url;
+    }
+    throw new Error("too big");
+  }
+
+  function setPendingUI(on) {
+    pendingEl.hidden = !on;
+    input.hidden = on;
+    if (on) input.value = "";
+    updateSend();
+  }
+
+  attachBtn.addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setNote("pick an image file", true); return; }
+    setNote("preparing photo…");
+    try {
+      pendingImage = await compress(file);
+      thumbEl.src = pendingImage;
+      setPendingUI(true);
+      setNote("");
+    } catch (err) {
+      setNote("couldn't use that photo, try another", true);
+    }
+  });
+
+  removeBtn.addEventListener("click", () => {
+    pendingImage = null;
+    setPendingUI(false);
+    if (!coarsePointer) input.focus();
+  });
+
+  // ---------- sending ----------
   function updateSend() {
-    sendBtn.disabled = sending || !input.value.trim();
+    sendBtn.disabled = sending || (!pendingImage && !input.value.trim());
+    attachBtn.disabled = sending;
   }
   input.addEventListener("input", updateSend);
 
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text || sending) return;
+    if (sending || (!pendingImage && !text)) return;
+
     sending = true;
     updateSend();
+    // a photo replaces the text, and text replaces a photo
+    const payload = pendingImage ? { image: pendingImage, at: Date.now() } : { text: text, at: Date.now() };
     try {
       const res = await fetch(NODE_URL, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text, at: Date.now() })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       input.value = "";
+      pendingImage = null;
+      setPendingUI(false);
       setNote("");
     } catch (err) {
       setNote("couldn't save, try again", true);
     } finally {
       sending = false;
       updateSend();
-      if (!coarsePointer) input.focus();
+      if (!coarsePointer && !input.hidden) input.focus();
     }
   });
 
+  // ---------- refit on rotate / font load ----------
   let lastWidth = window.innerWidth;
   let resizeTimer;
+  const refit = () => { if (mode === "text" && lastText) applySize(lastText); };
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      // the on-screen keyboard changes the height, not the width: leave the text alone
       if (document.activeElement === input && window.innerWidth === lastWidth) return;
       lastWidth = window.innerWidth;
-      if (lastText) applySize(lastText);
+      refit();
     }, 150);
   });
-  const refit = () => { if (lastText) applySize(lastText); };
   if (document.fonts) {
     document.fonts.ready.then(refit);
     document.fonts.addEventListener("loadingdone", refit);
   }
 
-  render();
   connect();
 </script>
 </body>
